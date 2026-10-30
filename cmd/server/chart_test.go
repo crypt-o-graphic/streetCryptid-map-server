@@ -59,6 +59,10 @@ func TestChartBakeStagesAreIndependent(t *testing.T) {
 		"--set", "tiles.bake.s3.bucket=scratch-map-bakes",
 		"--set", "tiles.bake.s3.credentialsSecret=map-bake-s3",
 	}
+	stale := exec.Command(helm, append(append([]string{}, common...), "--set", "tiles.bake.image.tag=0.6.0")...)
+	if out, err := stale.CombinedOutput(); err == nil || !strings.Contains(string(out), "must match chart appVersion") {
+		t.Fatalf("chart accepted an older image without the checkpoint runner: %v\n%s", err, out)
+	}
 	for _, stage := range []struct {
 		file, want, forbidden string
 	}{

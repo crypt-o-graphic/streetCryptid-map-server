@@ -28,7 +28,9 @@ jobs:
       - run: go test -race ./...
 
   build-push:
-    needs: test
+    # Flux tracks this image's semver tag for all three images. Publish it
+    # only after the matching bake images exist.
+    needs: [test, terrain-bake-image, planetiler-image]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

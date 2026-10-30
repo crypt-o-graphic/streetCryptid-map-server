@@ -1,5 +1,9 @@
 {{- if .Values.tiles.bake.enabled }}
 {{- $b := .Values.tiles.bake }}
+{{- $tag := $b.image.tag | default .Values.image.tag | default .Chart.AppVersion }}
+{{- if and (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+$" $tag) (ne $tag .Chart.AppVersion) }}
+{{- fail "tiles.bake.image.tag must match chart appVersion; wait for the matching release images before upgrading" }}
+{{- end }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
