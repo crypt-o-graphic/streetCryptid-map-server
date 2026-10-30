@@ -105,9 +105,8 @@ tiles:
         memory: 512Mi
 
   # --- In-cluster planet bake (option C) ------------------------------------
-  # Produces planet.pmtiles ON the cluster instead of downloading it, then
-  # `tiles import` installs it as the active release. HEAVILY THROTTLED so it
-  # cannot starve the rest of the homelab. Disabled by default; when enabled,
+  # Produces planet.pmtiles on scratch, checkpoints and publishes to S3, then
+  # an independent import CronJob installs the completed release. Disabled by default; when enabled,
   # keep autoUpdate off (the bake is the update mechanism) and DO NOT set a
   # manifestURL/publicKey — locally baked releases are unsigned and trusted.
   #
@@ -116,6 +115,20 @@ tiles:
   # ReadWriteOnce tile volume with the bake pod.
   bake:
     enabled: false
+    # Empty uses the Kubernetes Job name. Set the ORIGINAL run ID to resume
+    # that run from a new Job after its retry/deadline budget is exhausted.
+    runID: ""
+    backoffLimit: 6
+    activeDeadlineSeconds: 604800
+    s3:
+      endpoint: ""
+      bucket: ""
+      prefix: planetiler
+      region: us-east-1
+      # Existing Secret with AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+      credentialsSecret: ""
+      namespace: seaweedfs
+      port: 8333
     # Planetiler's OpenMapTiles profile with OSM land cover from z5 instead of
     # z7 (planetiler/, built by CI). Runs as the bake init container and takes
     # the same arguments as ghcr.io/onthegomap/planetiler, which still works
@@ -170,6 +183,12 @@ tiles:
       limits:
         cpu: "1"
         memory: 1Gi
+    import:
+      enabled: true
+      suspend: false
+      schedule: "*/15 * * * *"
+      backoffLimit: 6
+      activeDeadlineSeconds: 43200
 
   # --- Terrain bake (the /terrain DEM) ---------------------------------------
   # Bakes Copernicus GLO-30 (GLO-90 where 30 m is withheld) into Terrarium WebP

@@ -15,6 +15,7 @@ spec:
   {{- end }}
   selector:
     {{- include "scms.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
   ports:
     # Only the API port is ever exposed. Martin's port 3000 is intentionally
     # absent: it is reachable only over pod localhost.

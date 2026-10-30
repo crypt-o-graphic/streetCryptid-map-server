@@ -96,8 +96,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: checkpoint and transfer tests
+        run: python -m unittest discover -s planetiler -p 'test_*.py' -v
       - name: build the bake image
-        run: docker build -t planetiler-bake planetiler
+        run: docker build -t planetiler-bake -f planetiler/Dockerfile .
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/bake/sources
@@ -109,7 +114,15 @@ jobs:
             -v "$RUNNER_TEMP/bake:/work" planetiler-bake \
             --download --area=luxembourg --maxzoom=7 --languages=en \
             --download-dir=/work/sources --tmpdir=/work/tmp \
-            --force --output=/work/out.pmtiles
+            --reuse_featuredb=true --force --output=/work/out.pmtiles
+      - name: resume archive from completed sorted features
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e JAVA_TOOL_OPTIONS=-Xmx3g \
+            -v "$RUNNER_TEMP/bake:/work" planetiler-bake \
+            --area=luxembourg --maxzoom=7 --languages=en \
+            --download-dir=/work/sources --tmpdir=/work/tmp \
+            --reuse_featuredb=true --force --output=/work/resumed.pmtiles 2>&1 | tee /tmp/resume.log
+          grep 'Reusing existing feature DB state' /tmp/resume.log
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -117,4 +130,6 @@ jobs:
         run: |
           pip install --quiet pmtiles mapbox-vector-tile
           python planetiler/check_landcover.py "$RUNNER_TEMP/bake/out.pmtiles" \
+            --lat 49.85 --lon 6.0 --class wood
+          python planetiler/check_landcover.py "$RUNNER_TEMP/bake/resumed.pmtiles" \
             --lat 49.85 --lon 6.0 --class wood

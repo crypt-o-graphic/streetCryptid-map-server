@@ -12,6 +12,7 @@ func TestChartCacheWiring(t *testing.T) {
 	if err != nil {
 		t.Skip("helm is not installed")
 	}
+
 	chart := filepath.Join("..", "..", "helm", "streetcryptid-map-server")
 	for _, claim := range []string{"", "existing-cache"} {
 		cmd := exec.Command(helm, "template", "maps", chart, "--set", "tiles.autoUpdate.enabled=false", "--set", "persistence.cache.existingClaim="+claim)
@@ -40,6 +41,41 @@ func TestChartCacheWiring(t *testing.T) {
 			if !strings.Contains(text, "claimName: existing-cache") || strings.Contains(text, "name: maps-streetcryptid-map-server-cache\n") {
 				t.Fatal("existing claim not respected")
 			}
+		}
+	}
+}
+
+func TestChartBakeStagesAreIndependent(t *testing.T) {
+	helm, err := exec.LookPath("helm")
+	if err != nil {
+		t.Skip("helm is not installed")
+	}
+	chart := filepath.Join("..", "..", "helm", "streetcryptid-map-server")
+	common := []string{
+		"template", "maps", chart,
+		"--set", "tiles.autoUpdate.enabled=false",
+		"--set", "tiles.bake.enabled=true",
+		"--set", "tiles.bake.s3.endpoint=http://s3.example:8333",
+		"--set", "tiles.bake.s3.bucket=scratch-map-bakes",
+		"--set", "tiles.bake.s3.credentialsSecret=map-bake-s3",
+	}
+	for _, stage := range []struct {
+		file, want, forbidden string
+	}{
+		{"bake-cronjob.yaml", `- "build"`, "name: tiles"},
+		{"bake-import-cronjob.yaml", `args: ["import"]`, "name: scratch"},
+	} {
+		cmd := exec.Command(helm, append(append([]string{}, common...), "--show-only", "templates/"+stage.file)...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("helm: %v\n%s", err, out)
+		}
+		text := string(out)
+		if !strings.Contains(text, stage.want) || !strings.Contains(text, "backoffLimit: 6") {
+			t.Fatalf("%s missing resumable stage configuration:\n%s", stage.file, text)
+		}
+		if strings.Contains(text, stage.forbidden) || strings.Contains(text, "initContainers:") {
+			t.Fatalf("%s couples builder and serving-volume lifetimes:\n%s", stage.file, text)
 		}
 	}
 }

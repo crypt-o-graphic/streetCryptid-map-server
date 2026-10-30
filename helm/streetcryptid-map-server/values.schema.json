@@ -75,8 +75,51 @@
         },
         "bake": {
           "type": "object",
+          "allOf": [
+            {
+              "if": { "properties": { "enabled": { "const": true } }, "required": ["enabled"] },
+              "then": {
+                "properties": {
+                  "s3": {
+                    "required": ["endpoint", "bucket", "credentialsSecret"],
+                    "properties": {
+                      "endpoint": { "type": "string", "pattern": "^https?://" },
+                      "bucket": { "type": "string", "minLength": 1 },
+                      "credentialsSecret": { "type": "string", "minLength": 1 }
+                    }
+                  }
+                },
+                "required": ["s3"]
+              }
+            }
+          ],
           "properties": {
             "enabled": { "type": "boolean" },
+            "runID": { "type": "string", "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$" },
+            "backoffLimit": { "type": "integer", "minimum": 0 },
+            "activeDeadlineSeconds": { "type": "integer", "minimum": 3600 },
+            "s3": {
+              "type": "object",
+              "properties": {
+                "endpoint": { "type": "string" },
+                "bucket": { "type": "string" },
+                "prefix": { "type": "string", "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$" },
+                "region": { "type": "string", "minLength": 1 },
+                "credentialsSecret": { "type": "string" },
+                "namespace": { "type": "string", "minLength": 1 },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+              }
+            },
+            "import": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "suspend": { "type": "boolean" },
+                "schedule": { "type": "string" },
+                "backoffLimit": { "type": "integer", "minimum": 0 },
+                "activeDeadlineSeconds": { "type": "integer", "minimum": 3600 }
+              }
+            },
             "area": { "type": "string", "minLength": 1 },
             "minZoom": { "type": "integer", "minimum": 0, "maximum": 24 },
             "maxZoom": { "type": "integer", "minimum": 0, "maximum": 24 },

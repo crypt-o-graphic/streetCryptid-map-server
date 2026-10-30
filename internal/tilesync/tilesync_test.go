@@ -320,6 +320,46 @@ func TestImportRejectsNonPMTiles(t *testing.T) {
 	}
 }
 
+func TestImportRetriesAlreadyMovedArtifact(t *testing.T) {
+	s := NewSyncer(Config{DataDir: t.TempDir(), RetainReleases: 2}, nil)
+	if err := s.st.EnsureLayout(); err != nil {
+		t.Fatal(err)
+	}
+	baked := filepath.Join(s.st.stagingPath(), "planet.pmtiles")
+	if err := os.WriteFile(baked, synthPMTiles(0, 14), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ImportLocal(context.Background(), baked, "retry-build"); err != nil {
+		t.Fatal(err)
+	}
+	installed := s.st.PMTilesPathFor("retry-build")
+	if _, err := s.ImportLocal(context.Background(), installed, "retry-build"); err != nil {
+		t.Fatalf("retry from installed artifact: %v", err)
+	}
+	if _, err := s.st.ReadActive(); err != nil {
+		t.Fatalf("retry damaged active release: %v", err)
+	}
+}
+
+func TestImportNotificationFailureIsRetryable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	s := NewSyncer(Config{
+		DataDir: t.TempDir(), RetainReleases: 2, Namespace: "tiles", DeploymentName: "maps",
+	}, &KubeClient{host: server.URL, http: server.Client()})
+	s.st.EnsureLayout()
+	baked := filepath.Join(s.st.stagingPath(), "planet.pmtiles")
+	os.WriteFile(baked, synthPMTiles(0, 14), 0o644)
+	if _, err := s.ImportLocal(context.Background(), baked, "notify-retry"); err == nil {
+		t.Fatal("failed deployment notification must fail the import job")
+	}
+	if _, err := s.st.ReadActive(); err != nil {
+		t.Fatalf("installed artifact must survive notification failure: %v", err)
+	}
+}
+
 func TestUpdateStagesAndPatches(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	as := newArtifactServer(t, priv, "v-1", 0, 14)

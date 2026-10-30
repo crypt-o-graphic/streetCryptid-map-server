@@ -5,6 +5,15 @@
 # a drop-in for ghcr.io/onthegomap/planetiler in the bake CronJob: same
 # arguments, same output.
 
+# --- import helper -----------------------------------------------------------
+FROM golang:1.26-bookworm AS helper
+WORKDIR /src
+COPY go.mod go.sum* ./
+RUN go mod download
+COPY cmd/server ./cmd/server
+COPY internal ./internal
+RUN CGO_ENABLED=0 go build -trimpath -o /import-helper ./cmd/server
+
 # --- build stage -------------------------------------------------------------
 FROM eclipse-temurin:25-jdk-noble AS build
 
@@ -24,7 +33,7 @@ RUN git init -q . \
  && git fetch -q --depth 1 origin "$OMT_COMMIT" \
  && git checkout -q FETCH_HEAD
 
-COPY landcover-low-zoom.patch /tmp/landcover-low-zoom.patch
+COPY planetiler/landcover-low-zoom.patch /tmp/landcover-low-zoom.patch
 RUN git apply --verbose /tmp/landcover-low-zoom.patch
 
 # The landcover tests the patch rewrites run here, so a patch that applies but
@@ -33,12 +42,31 @@ RUN git apply --verbose /tmp/landcover-low-zoom.patch
 RUN ./mvnw -B -q -Dtest=LandcoverTest -Dsurefire.failIfNoSpecifiedTests=false package \
  && cp target/planetiler-openmaptiles-*-with-deps.jar /out.jar
 
+# Patch only the pinned engine's progress-size helper. Files.walk may throw
+# UncheckedIOException when sort removes a chunk during a metrics sample.
+ARG ENGINE_COMMIT=0e5588c4a6e8c29a270a33afe8df62027d889604
+COPY planetiler/progress-walk.patch /tmp/progress-walk.patch
+RUN git init -q /engine \
+ && git -C /engine fetch -q --depth 1 https://github.com/onthegomap/planetiler.git "$ENGINE_COMMIT" \
+ && git -C /engine checkout -q FETCH_HEAD -- planetiler-core/src/main/java/com/onthegomap/planetiler/util/FileUtils.java \
+ && git -C /engine apply --verbose /tmp/progress-walk.patch \
+ && javac -cp /out.jar -d /patched /engine/planetiler-core/src/main/java/com/onthegomap/planetiler/util/FileUtils.java \
+ && jar --update --file /out.jar -C /patched com/onthegomap/planetiler/util/FileUtils.class
+
 # --- final stage -------------------------------------------------------------
 FROM eclipse-temurin:25-jre-noble
 
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-boto3 ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /out.jar /app/planetiler.jar
+COPY --from=helper /import-helper /usr/local/bin/streetcryptid-map-server
+COPY planetiler/bake.py /app/bake.py
+
+ENV PYTHONUNBUFFERED=1
 
 # Runs as an arbitrary non-root uid in the cluster; every path it writes is
 # passed on the command line (--tmpdir, --download-dir, --output).
 USER 65532:65532
-ENTRYPOINT ["java", "-jar", "/app/planetiler.jar"]
+ENTRYPOINT ["python3", "/app/bake.py"]

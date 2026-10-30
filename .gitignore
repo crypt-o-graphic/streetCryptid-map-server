@@ -28,6 +28,7 @@ helm/**/*-secret.yaml
 *.log
 *.prof
 *.test
+__pycache__/
 
 # Editor / OS.
 .vscode/

@@ -1,0 +1,16 @@
+diff --git a/planetiler-core/src/main/java/com/onthegomap/planetiler/util/FileUtils.java b/planetiler-core/src/main/java/com/onthegomap/planetiler/util/FileUtils.java
+--- a/planetiler-core/src/main/java/com/onthegomap/planetiler/util/FileUtils.java
++++ b/planetiler-core/src/main/java/com/onthegomap/planetiler/util/FileUtils.java
+@@ -131,11 +131,11 @@ public class FileUtils {
+   /** Returns the directory usage of all files until {@code path} or 0 if missing/inaccessible. */
+   public static long directorySize(Path path) {
+     try (var walker = Files.walk(path)) {
+       return walker
+         .filter(Files::isRegularFile)
+         .mapToLong(FileUtils::fileSize)
+         .sum();
+-    } catch (IOException e) {
++    } catch (IOException | UncheckedIOException e) {
+       return 0;
+     }
+   }

@@ -96,3 +96,13 @@ http://127.0.0.1:{{ .Values.martin.port }}/{{ include "scms.martinSource" . }}
 {{- printf "%s-tiles" (include "scms.fullname" .) -}}
 {{- end -}}
 {{- end -}}
+{{- define "scms.bakeS3Env" -}}
+- name: BAKE_S3_ENDPOINT
+  value: {{ required "tiles.bake.s3.endpoint is required for resumable bakes" .Values.tiles.bake.s3.endpoint | quote }}
+- name: BAKE_S3_BUCKET
+  value: {{ required "tiles.bake.s3.bucket is required for resumable bakes" .Values.tiles.bake.s3.bucket | quote }}
+- name: BAKE_S3_PREFIX
+  value: {{ .Values.tiles.bake.s3.prefix | quote }}
+- name: AWS_DEFAULT_REGION
+  value: {{ .Values.tiles.bake.s3.region | quote }}
+{{- end -}}

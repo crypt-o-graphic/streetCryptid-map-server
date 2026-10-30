@@ -43,12 +43,10 @@ func (s *Syncer) ImportLocal(ctx context.Context, pmtilesPath, version string) (
 	}
 	s.log.Info("imported and activated local release", "version", m.Version, "zoom", fmt.Sprintf("%d-%d", m.MinZoom, m.MaxZoom))
 
-	// If running in-cluster with a Deployment target, recreate the pod so Martin
-	// reopens the new dataset (Recreate strategy). Best-effort: the release is
-	// already active regardless.
+	// A failed notification is retryable even though the release is installed.
 	if s.kube != nil && s.cfg.DeploymentName != "" {
 		if err := s.kube.PatchDeploymentPendingVersion(ctx, s.cfg.Namespace, s.cfg.DeploymentName, m.Version); err != nil {
-			s.log.Warn("could not trigger pod recreate after import", "err", err.Error())
+			return nil, fmt.Errorf("import: notify deployment: %w", err)
 		} else {
 			s.log.Info("patched deployment to pick up new dataset", "deployment", s.cfg.DeploymentName)
 		}
@@ -134,6 +132,17 @@ func hashFile(path string) (int64, string, error) {
 // moveOrCopy renames src to dst, falling back to a streaming copy when the two
 // live on different filesystems (the bake scratch volume vs the tile volume).
 func moveOrCopy(src, dst string) error {
+	srcAbs, err := filepath.Abs(src)
+	if err != nil {
+		return err
+	}
+	dstAbs, err := filepath.Abs(dst)
+	if err != nil {
+		return err
+	}
+	if srcAbs == dstAbs {
+		return nil
+	}
 	if err := os.Rename(src, dst); err == nil {
 		return nil
 	}
@@ -148,6 +157,11 @@ func moveOrCopy(src, dst string) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := out.Sync(); err != nil {
 		out.Close()
 		os.Remove(tmp)
 		return err

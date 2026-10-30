@@ -290,27 +290,72 @@ enters the cluster.
 ### In-cluster bake (no external download)
 
 If you'd rather **produce** the planet on the cluster than host it externally,
-enable `tiles.bake` (with `tiles.autoUpdate.enabled=false`). A **heavily
-throttled** CronJob runs Planetiler onto a dedicated scratch volume, then
-`tiles import` installs the result as the active release — no network fetch and
-no signature (an in-cluster-baked file is trusted; the download path still
-requires a signature).
+enable `tiles.bake` (with `tiles.autoUpdate.enabled=false`) and configure
+`tiles.bake.s3.endpoint`, `bucket`, and `credentialsSecret`. The existing Secret
+must contain `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, scoped to that
+bucket. S3-compatible, path-style endpoints are supported, including SeaweedFS
+scratch buckets. Replication and backup policies are independent of resuming.
+
+The builder and importer are **separate Jobs**. The builder mounts only its
+scratch PVC; it never mounts the serving volume. The importer mounts only the
+serving PVC and polls S3 for the latest committed artifact every 15 minutes.
+A copy, storage, or deployment-notification failure retries import, not baking.
+The internal S3 path is trusted like the previous in-cluster bake; the external
+download path still requires a signed HTTPS manifest.
+
+The Kubernetes Job name is the build ID (`BAKE_RUN_ID`). Automatic Pod retries
+keep that ID. A run freezes the profile JAR hash, options, and source checksums;
+changing options under the same ID is rejected. Each run has its own scratch
+directory, so an unconditional Planetiler `--force` cannot erase another run's
+completed output. Previously completed, untracked scratch files are not adopted
+or deleted automatically.
+
+**Resume boundaries:**
+
+- Planetiler keeps the sorted feature database, string tables, and chunk
+  manifest with `--reuse_featuredb=true`. Once complete, the runner checkpoints
+  those immutable files to S3 while archive encoding proceeds. A retry restores
+  them and skips source processing and sorting. Before this boundary, interrupted
+  source processing must still restart; this is not per-OSM-record checkpointing.
+- A successfully finalized local archive gets an atomic completion marker.
+  Publication retries skip Java entirely. S3 multipart upload IDs are persisted
+  locally and already-uploaded parts are reused after a Pod restart.
+- The ready pointer is written only after the artifact upload and its manifest
+  are complete. Import downloads use conditional byte ranges into a persistent
+  `.part` file, verify size and SHA-256, and install with a stable release ID.
+  A retry also recognizes an archive already moved into its release directory.
+
+If a Job exhausts its retries or seven-day deadline, create another Job with
+the **original** `BAKE_RUN_ID`; a new ID deliberately starts a new build.
+For example, set `tiles.bake.runID` to the failed Job's name before creating
+the replacement, then clear it before scheduling a genuinely new build.
+S3 multipart parts require the local upload-state files to resume; loss of that
+state restarts that file's upload, not any already-committed bake phase.
 
 The bake is boxed in so it can't starve the cluster: pinned to one node,
 CPU/memory limited, Planetiler `--threads`/`-Xmx` bounded, the low-memory mmap
 profile (nodemap spills to SSD), a capped OSM download bandwidth, and a
 suspended-by-default schedule. A planet bake still wants ~64 GB RAM, ~500 GB
-scratch, and ~a day — pin the serving Deployment to the same node so it shares
-the ReadWriteOnce tile volume.
+scratch, and ~a day — pin the serving Deployment and importer to the same node
+so they can share the ReadWriteOnce tile volume.
 
 ```bash
 helm upgrade --install maps helm/streetcryptid-map-server \
   --set tiles.autoUpdate.enabled=false \
   --set tiles.bake.enabled=true \
+  --set tiles.bake.s3.endpoint=http://seaweedfs-s3.seaweedfs.svc.cluster.local:8333 \
+  --set tiles.bake.s3.bucket=scratch-map-bakes \
+  --set tiles.bake.s3.credentialsSecret=map-bake-s3 \
   --set nodeSelector."kubernetes\.io/hostname"=delphinium
 # trigger the bake on demand:
 kubectl create job maps-bake-now --from=cronjob/maps-streetcryptid-map-server-bake
 ```
+
+The image also accepts `check`, which exercises a real multipart upload and
+byte-range download against the configured S3 endpoint without baking. Raw
+Planetiler arguments still work for external scripts and regional tests.
+Build it from the repository root with
+`docker build -f planetiler/Dockerfile -t streetcryptid-planetiler .`.
 
 #### Land cover below z7
 

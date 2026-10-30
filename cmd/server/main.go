@@ -277,11 +277,11 @@ func runTiles(log *slog.Logger, args []string) error {
 					cfg.Namespace = k.Namespace()
 				}
 			} else {
-				log.Warn("import: no in-cluster client; will not trigger pod recreate", "err", err.Error())
+				return fmt.Errorf("import: deployment notification requires in-cluster client: %w", err)
 			}
 		}
 		s := tilesync.NewSyncer(cfg, kube)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), envDuration("TILE_IMPORT_TIMEOUT", 6*time.Hour))
 		defer cancel()
 		if _, err := s.ImportLocal(ctx, path, importVersion); err != nil {
 			return fmt.Errorf("import: %w", err)

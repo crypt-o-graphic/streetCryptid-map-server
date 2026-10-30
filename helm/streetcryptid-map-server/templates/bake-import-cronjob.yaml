@@ -1,0 +1,65 @@
+{{- if and .Values.tiles.bake.enabled .Values.tiles.bake.import.enabled }}
+{{- $b := .Values.tiles.bake }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "scms.fullname" . }}-bake-import
+  labels:
+    {{- include "scms.labels" . | nindent 4 }}
+spec:
+  suspend: {{ $b.import.suspend }}
+  schedule: {{ $b.import.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: {{ $b.import.backoffLimit }}
+      activeDeadlineSeconds: {{ $b.import.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "scms.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: bake-import
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "scms.serviceAccountName" . }}
+          terminationGracePeriodSeconds: 60
+          nodeSelector:
+            kubernetes.io/hostname: {{ $b.nodeName | quote }}
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: import
+              image: "{{ $b.image.repository }}:{{ $b.image.tag | default .Values.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ $b.image.pullPolicy }}
+              args: ["import"]
+              env:
+                {{- include "scms.bakeS3Env" . | nindent 16 }}
+                - name: TILE_DATA_DIR
+                  value: {{ .Values.tiles.dataDir | quote }}
+                - name: TILE_RETAIN_RELEASES
+                  value: {{ .Values.tiles.retainReleases | quote }}
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: DEPLOYMENT_NAME
+                  value: {{ include "scms.fullname" . | quote }}
+              envFrom:
+                - secretRef:
+                    name: {{ $b.s3.credentialsSecret | quote }}
+              volumeMounts:
+                - name: tiles
+                  mountPath: {{ .Values.tiles.dataDir }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                {{- toYaml $b.importResources | nindent 16 }}
+          volumes:
+            - name: tiles
+              persistentVolumeClaim:
+                claimName: {{ include "scms.tilesClaimName" . }}
+{{- end }}

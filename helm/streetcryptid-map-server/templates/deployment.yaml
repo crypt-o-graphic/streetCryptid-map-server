@@ -15,6 +15,7 @@ spec:
     metadata:
       labels:
         {{- include "scms.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
       annotations:
         # Roll the pod when operational config changes.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}

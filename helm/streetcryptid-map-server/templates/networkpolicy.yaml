@@ -44,6 +44,15 @@ spec:
           protocol: TCP
         - port: 6443
           protocol: TCP
+    {{- if .Values.tiles.bake.enabled }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.tiles.bake.s3.namespace | quote }}
+      ports:
+        - port: {{ .Values.tiles.bake.s3.port }}
+          protocol: TCP
+    {{- end }}
 # Martin (127.0.0.1:3000) is pod-local loopback and needs no NetworkPolicy rule;
 # it is never reachable off-pod.
 {{- end }}
