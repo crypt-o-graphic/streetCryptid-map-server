@@ -471,6 +471,14 @@ semver tags on git tags `v*` (plus `sha-<commit>`), so a cluster running Flux
 docker pull ghcr.io/unrealjune/streetcryptid-map-server:<semver>
 ```
 
+## Contributing
+
+Contributions are welcome. Before your first pull request can be merged, you'll be asked to sign the
+[Crypt-O-Graphic LLC Contributor License Agreement](https://gist.github.com/Cobular/ef952bced7fa633c1ea17c3a27dacc03):
+the CLA Assistant bot comments on your pull request with a link, and signing takes one click with
+your GitHub account. You keep the copyright to your work; the agreement gives Crypt-O-Graphic LLC a
+license to use and relicense it.
+
 ## Layout
 
 ```
