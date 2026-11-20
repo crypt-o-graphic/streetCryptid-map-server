@@ -106,13 +106,14 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/bake/sources
-          key: planetiler-sources-luxembourg-v1
+          key: planetiler-sources-luxembourg-v2
       - name: bake Luxembourg to z7
         run: |
           mkdir -p "$RUNNER_TEMP/bake/sources" "$RUNNER_TEMP/bake/tmp"
           docker run --rm --user "$(id -u):$(id -g)" -e JAVA_TOOL_OPTIONS=-Xmx3g \
             -v "$RUNNER_TEMP/bake:/work" planetiler-bake \
             --download --area=luxembourg --maxzoom=7 --languages=en \
+            --osm_url=https://download.geofabrik.de/europe/luxembourg-latest.osm.pbf \
             --download-dir=/work/sources --tmpdir=/work/tmp \
             --reuse_featuredb=true --force --output=/work/out.pmtiles
       - name: resume archive from completed sorted features
@@ -120,6 +121,7 @@ jobs:
           docker run --rm --user "$(id -u):$(id -g)" -e JAVA_TOOL_OPTIONS=-Xmx3g \
             -v "$RUNNER_TEMP/bake:/work" planetiler-bake \
             --area=luxembourg --maxzoom=7 --languages=en \
+            --osm_url=https://download.geofabrik.de/europe/luxembourg-latest.osm.pbf \
             --download-dir=/work/sources --tmpdir=/work/tmp \
             --reuse_featuredb=true --force --output=/work/resumed.pmtiles 2>&1 | tee /tmp/resume.log
           grep 'Reusing existing feature DB state' /tmp/resume.log

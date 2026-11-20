@@ -121,6 +121,7 @@
               }
             },
             "area": { "type": "string", "minLength": 1 },
+            "osmURL": { "type": "string" },
             "minZoom": { "type": "integer", "minimum": 0, "maximum": 24 },
             "maxZoom": { "type": "integer", "minimum": 0, "maximum": 24 },
             "languages": { "type": "string" },
