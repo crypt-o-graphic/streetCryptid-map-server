@@ -137,8 +137,11 @@ tiles:
       repository: ghcr.io/unrealjune/streetcryptid-planetiler
       tag: ""          # defaults to image.tag (same release), then .Chart.AppVersion
       pullPolicy: IfNotPresent
-    # Planetiler --area (planet, or a region extract name / .osm.pbf URL).
+    # Planetiler --area (planet or a regional extract name, e.g. luxembourg).
     area: planet
+    # Direct .osm.pbf URL for that area; skips the Geofabrik index for regional bakes.
+    # Example: https://download.geofabrik.de/europe/luxembourg-latest.osm.pbf
+    osmURL: ""
     minZoom: 0
     maxZoom: 14
     # Restrict baked name:<lang> label variants. OpenMapTiles otherwise emits

@@ -46,6 +46,9 @@ spec:
                 - "build"
                 - "--download"
                 - "--area={{ $b.area }}"
+                {{- with $b.osmURL }}
+                - {{ printf "--osm_url=%s" . | quote }}
+                {{- end }}
                 - "--minzoom={{ $b.minZoom }}"
                 - "--maxzoom={{ $b.maxZoom }}"
                 {{- if $b.languages }}
